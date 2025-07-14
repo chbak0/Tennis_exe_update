@@ -65,7 +65,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.2"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.3"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
@@ -222,21 +222,58 @@ class TennisBookingGUI:
         self.root.title(f"송도 테니스 예약 자동화 (v{APP_VERSION})")
         self.time_offset = 0
         self.analytics_logger = AnalyticsLogger(ANALYTICS_URL, ANALYTICS_KEY)
+        
+        # 화면 정보 가져오기
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-
-        # 화면 크기의 90% 너비와 85% 높이로 창 크기를 설정합니다.
-        # 이 비율(0.9, 0.85)은 원하는 대로 조절할 수 있습니다.
-        window_width = int(screen_width * 0.7)
-        window_height = int(screen_height * 0.85)
         
-        # 창이 너무 작아지는 것을 방지하기 위한 최소 크기를 정해줍니다.
-        self.root.minsize(1280, 800)
-
-        # 창을 화면 정중앙에 위치시킵니다.
-        center_x = int(screen_width / 2 - window_width / 2)
-        center_y = int(screen_height / 2 - window_height / 2)
+        # 해상도별 적응적 크기 설정
+        if screen_width >= 2800:  # 갤럭시북5프로 16인치 (2880x1800)
+            width_ratio = 0.55  # 갤럭시북5프로 전용 최적화
+            height_ratio = 0.6  
+        elif screen_width >= 2000:  # 기타 고해상도 노트북
+            width_ratio = 0.6   
+            height_ratio = 0.65 
+        elif screen_width >= 1920:  # FHD 모니터 (일반 노트북)
+            width_ratio = 0.5   
+            height_ratio = 0.6  
+        elif screen_width >= 1500:  # 중간 해상도
+            width_ratio = 0.65  
+            height_ratio = 0.7  
+        elif screen_width >= 1366:  # 중간 크기 모니터
+            width_ratio = 0.75
+            height_ratio = 0.75
+        else:  # 작은 화면
+            width_ratio = 0.85
+            height_ratio = 0.8
+            
+        # 창 크기 계산
+        window_width = int(screen_width * width_ratio)
+        window_height = int(screen_height * height_ratio)
+        
+        # 최소/최대 크기 제한 (해상도 기반)
+        min_width = min(1200, int(screen_width * 0.75))
+        min_height = min(800, int(screen_height * 0.7))
+        max_width = int(screen_width * 0.95)
+        max_height = int(screen_height * 0.9)
+        
+        # 크기 제한 적용
+        window_width = max(min_width, min(window_width, max_width))
+        window_height = max(min_height, min(window_height, max_height))
+        
+        # 최소 크기 설정
+        self.root.minsize(min_width, min_height)
+        
+        # 창을 화면 정중앙에 위치시키기
+        center_x = (screen_width - window_width) // 2
+        center_y = (screen_height - window_height) // 2
+        
+        # 위치가 음수가 되지 않도록 보정
+        center_x = max(0, center_x)
+        center_y = max(0, center_y)
+        
         self.root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+        
         style = ttk.Style(); style.theme_use('clam')
         self.booking_api = SongdoTennisBooking()
         self.is_logged_in = False
@@ -353,45 +390,101 @@ class TennisBookingGUI:
             messagebox.showerror("업데이트 오류", f"업데이트 중 오류가 발생했습니다:\n{e}")
 
     def create_widgets(self):
-        self.root.columnconfigure(0, weight=3); self.root.columnconfigure(1, weight=2)
+        self.root.columnconfigure(0, weight=3)
+        self.root.columnconfigure(1, weight=2)
         self.root.rowconfigure(0, weight=1)
-        left_panel = ttk.Frame(self.root, padding="10"); left_panel.grid(row=0, column=0, sticky="nsew", pady=0)
-        left_panel.columnconfigure(0, weight=1); left_panel.rowconfigure(3, weight=1)
-        right_panel = ttk.Frame(self.root, padding="10"); right_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10), pady=0)
-        right_panel.rowconfigure(0, weight=1); right_panel.columnconfigure(0, weight=1)
+        
+        left_panel = ttk.Frame(self.root, padding="10")
+        left_panel.grid(row=0, column=0, sticky="nsew", pady=0)
+        left_panel.columnconfigure(0, weight=1)
+        # 왼쪽 패널에서는 '예약 목표' 부분이 세로 공간을 차지하도록 변경
+        left_panel.rowconfigure(1, weight=1) 
+
+        right_panel = ttk.Frame(self.root, padding="10")
+        right_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10), pady=0)
+        # 오른쪽 패널을 위아래로 1:1 비율로 나누도록 설정
+        right_panel.rowconfigure(0, weight=1) 
+        right_panel.rowconfigure(1, weight=1)
+        right_panel.columnconfigure(0, weight=1)
+        
+        # 위젯 생성 함수 호출 순서 변경
         self._create_login_widgets(left_panel)
         self._create_settings_widgets(left_panel)
         self._create_booking_widgets(left_panel)
-        self._create_log_widgets(left_panel)
-        self._create_my_bookings_widgets(right_panel)
+        self._create_my_bookings_widgets(right_panel) # 오른쪽 위
+        self._create_log_widgets(right_panel)        # 오른쪽 아래
+        
         self.calculate_booking_time()
         self.update_countdown()
         self.update_current_time()
 
     def center_window(self, window):
+        """다이얼로그 창을 화면 중앙에 배치하는 개선된 메서드"""
         window.update_idletasks()
-        width = window.winfo_width()
-        height = window.winfo_height()
+        
+        # 창 크기 정보
+        width = window.winfo_reqwidth()
+        height = window.winfo_reqheight()
+        
+        # 창 크기가 0인 경우 실제 크기 사용
+        if width <= 1:
+            width = window.winfo_width()
+        if height <= 1:
+            height = window.winfo_height()
+            
+        # 화면 크기 정보
         screen_width = window.winfo_screenwidth()
         screen_height = window.winfo_screenheight()
-        x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (height // 2)
+        
+        # 중앙 위치 계산
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        
+        # 화면 경계를 벗어나지 않도록 보정
+        x = max(0, min(x, screen_width - width))
+        y = max(0, min(y, screen_height - height))
+        
         window.geometry(f'{width}x{height}+{x}+{y}')
 
     def _create_login_widgets(self, parent: ttk.Frame):
-        frame = ttk.LabelFrame(parent, text="로그인 정보", padding="10"); frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        ttk.Label(frame, text="이메일:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.username_entry = ttk.Entry(frame, width=30); self.username_entry.grid(row=0, column=1, padx=5, pady=5)
-        ttk.Label(frame, text="비밀번호:").grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        self.password_entry = ttk.Entry(frame, width=20, show="*"); self.password_entry.grid(row=0, column=3, padx=5, pady=5)
+        frame = ttk.LabelFrame(parent, text="로그인 정보", padding="10")
+        frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        
+        # 프레임의 열 가중치 설정으로 공간 효율적 배분
+        frame.columnconfigure(1, weight=2)  # 이메일 입력 필드
+        frame.columnconfigure(3, weight=1)  # 비밀번호 입력 필드
+        
+        # 첫 번째 줄: 모든 요소를 한 줄에 배치
+        ttk.Label(frame, text="ID:").grid(row=0, column=0, padx=(0, 3), pady=5, sticky="w")
+        self.username_entry = ttk.Entry(frame)
+        self.username_entry.grid(row=0, column=1, padx=3, pady=5, sticky="ew")
+        
+        ttk.Label(frame, text="PW:").grid(row=0, column=2, padx=3, pady=5, sticky="w")
+        self.password_entry = ttk.Entry(frame, show="*")
+        self.password_entry.grid(row=0, column=3, padx=3, pady=5, sticky="ew")
         self.password_entry.bind("<Return>", lambda event: self.login())
-        self.login_button = ttk.Button(frame, text="로그인", command=self.login); self.login_button.grid(row=0, column=4, padx=5, pady=5)
-        self.logout_button = ttk.Button(frame, text="로그아웃", command=self.logout, state=tk.DISABLED); self.logout_button.grid(row=0, column=5, padx=5, pady=5)
-        self.login_status_label = ttk.Label(frame, text="로그인 상태: 로그아웃", foreground="red"); self.login_status_label.grid(row=1, column=0, columnspan=6, pady=5)
-
+        
+        self.login_button = ttk.Button(frame, text="로그인", command=self.login)
+        self.login_button.grid(row=0, column=4, padx=3, pady=5)
+        
+        self.logout_button = ttk.Button(frame, text="로그아웃", command=self.logout, state=tk.DISABLED)
+        self.logout_button.grid(row=0, column=5, padx=3, pady=5)
+        
+        # 두 번째 줄: 로그인 상태만 표시
+        self.login_status_label = ttk.Label(frame, text="로그인 상태: 로그아웃", foreground="red")
+        self.login_status_label.grid(row=1, column=0, columnspan=6, pady=(5, 0))
+        
     def _create_settings_widgets(self, parent: ttk.Frame):
-        frame = ttk.LabelFrame(parent, text="예약 목표 설정", padding="10"); frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        add_frame = ttk.Frame(frame); add_frame.pack(fill="x", pady=5)
+        # 이 프레임이 부모(left_panel) 안에서 세로 공간을 차지하도록 expand=True 추가
+        frame = ttk.LabelFrame(parent, text="예약 목표 설정", padding="10")
+        frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+        # 이 프레임 내부에서 Treeview가 담긴 list_frame이 늘어나도록 설정
+        frame.rowconfigure(1, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+        add_frame = ttk.Frame(frame)
+        add_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5) # pack 대신 grid 사용
+        
         ttk.Label(add_frame, text="새 목표:", font="TkDefaultFont 9 bold").grid(row=0, column=0, padx=(0,5))
         self.target_calendar = DateEntry(add_frame, width=12, date_pattern='y-mm-dd'); self.target_calendar.grid(row=0, column=1, padx=5)
         court_display_values = [f"{i}번 코트" for i in range(5, 18)]
@@ -399,13 +492,21 @@ class TennisBookingGUI:
         ttk.Combobox(add_frame, textvariable=self.target_court_var, values=court_display_values, width=10, state="readonly").grid(row=0, column=2, padx=5)
         self.target_time_var = tk.StringVar(value="06:00"); ttk.Combobox(add_frame, textvariable=self.target_time_var, values=["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"], width=8, state="readonly").grid(row=0, column=3, padx=5)
         ttk.Button(add_frame, text="추가", command=self.add_booking_target).grid(row=0, column=4, padx=5)
-        list_frame = ttk.Frame(frame); list_frame.pack(fill="x", expand=True, pady=5)
-        columns = ('날짜', '코트', '시간'); self.targets_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=8)
+        
+        list_frame = ttk.Frame(frame)
+        # Treeview가 프레임의 모든 공간을 채우도록 sticky="nsew" 사용
+        list_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+
+        columns = ('날짜', '코트', '시간'); self.targets_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=7)
         for col in columns: self.targets_tree.heading(col, text=col); self.targets_tree.column(col, width=120, anchor=tk.CENTER)
-        self.targets_tree.grid(row=0, column=0, sticky="ew"); list_frame.columnconfigure(0, weight=1)
+        self.targets_tree.grid(row=0, column=0, sticky="nsew")
         targets_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.targets_tree.yview); targets_scrollbar.grid(row=0, column=1, sticky="ns")
         self.targets_tree.configure(yscrollcommand=targets_scrollbar.set)
-        btn_frame = ttk.Frame(frame); btn_frame.pack(pady=5)
+        
+        btn_frame = ttk.Frame(frame)
+        btn_frame.grid(row=2, column=0, pady=5) # pack 대신 grid 사용
         ttk.Button(btn_frame, text="선택 삭제", command=self.remove_booking_target).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="전체 삭제", command=self.clear_all_targets).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="다음달 평일 자동추가", command=lambda: self.show_auto_add_dialog("평일")).pack(side=tk.LEFT, padx=5)
@@ -427,24 +528,39 @@ class TennisBookingGUI:
         ttk.Button(btn_frame_2, text="설정 불러오기", command=self.load_config).pack(side=tk.LEFT, padx=5)
 
     def _create_log_widgets(self, parent: ttk.Frame):
-        container = ttk.Frame(parent); container.grid(row=3, column=0, sticky="nsew", pady=(0, 10))
-        container.columnconfigure(0, weight=1); container.rowconfigure(1, weight=1)
-        header_frame = ttk.Frame(container); header_frame.grid(row=0, column=0, sticky="ew")
-        log_label = ttk.Label(header_frame, text="실행 로그", font="TkDefaultFont 9 bold"); log_label.pack(side=tk.LEFT, anchor='w', pady=2)
-        admin_btn = ttk.Button(header_frame, text="⚙️ 관리자 설정", command=self.prompt_admin_password); admin_btn.pack(side=tk.LEFT, padx=10, anchor='w')
-        self.log_text = scrolledtext.ScrolledText(container, height=10, wrap=tk.WORD); self.log_text.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
+        container = ttk.Frame(parent)
+        # 로그 위젯을 부모(right_panel)의 1번 행(아래쪽 절반)에 배치
+        container.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(1, weight=1)
+        
+        header_frame = ttk.Frame(container)
+        header_frame.grid(row=0, column=0, sticky="ew")
+        log_label = ttk.Label(header_frame, text="실행 로그", font="TkDefaultFont 9 bold")
+        log_label.pack(side=tk.LEFT, anchor='w', pady=2)
+        admin_btn = ttk.Button(header_frame, text="⚙️ 관리자 설정", command=self.prompt_admin_password)
+        admin_btn.pack(side=tk.LEFT, padx=10, anchor='w')
+        
+        self.log_text = scrolledtext.ScrolledText(container, height=10, wrap=tk.WORD)
+        self.log_text.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
 
     def _create_my_bookings_widgets(self, parent: ttk.Frame):
-        frame = ttk.LabelFrame(parent, text="내 예약 현황", padding="10"); frame.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
-        frame.rowconfigure(1, weight=1); frame.columnconfigure(0, weight=1)
-        top_frame = ttk.Frame(frame); top_frame.grid(row=0, column=0, sticky="e", pady=5)
+        frame = ttk.LabelFrame(parent, text="내 예약 현황", padding="10")
+        frame.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
+        frame.rowconfigure(1, weight=1) # <<< Treeview가 들어갈 행의 비중 설정
+        frame.columnconfigure(0, weight=1) # <<< Treeview가 들어갈 열의 비중 설정
+        
+        top_frame = ttk.Frame(frame)
+        top_frame.grid(row=0, column=0, sticky="e", pady=5)
         ttk.Button(top_frame, text="새로고침", command=self.load_my_reservations).pack()
+        
         cols = ('예약 날짜', '코트', '시간', '예약 상태'); self.my_bookings_tree = ttk.Treeview(frame, columns=cols, show='headings')
         for col in cols:
             self.my_bookings_tree.heading(col, text=col, command=lambda c=col: self.sort_my_bookings_tree(c))
             self.my_bookings_tree.column(col, width=120, anchor=tk.CENTER)
         self.my_bookings_tree.tag_configure('cancellable', foreground='blue'); self.my_bookings_tree.tag_configure('non_cancellable', foreground='red', background='#f0f0f0')
-        self.my_bookings_tree.grid(row=1, column=0, sticky="nsew")
+        self.my_bookings_tree.grid(row=1, column=0, sticky="nsew") # <<< sticky="nsew"로 상하좌우 모두 붙임
+        
         scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.my_bookings_tree.yview); scrollbar.grid(row=1, column=1, sticky="ns")
         self.my_bookings_tree.configure(yscrollcommand=scrollbar.set)
         self.my_bookings_tree.bind('<Button-1>', self.handle_tree_click)
@@ -460,8 +576,17 @@ class TennisBookingGUI:
     def open_admin_window(self):
         admin_win = tk.Toplevel(self.root)
         admin_win.title("관리자 설정 - 로그 관리")
-        admin_win.geometry("900x700")
-        self.center_window(admin_win)
+        screen_width = admin_win.winfo_screenwidth()
+        screen_height = admin_win.winfo_screenheight()
+        admin_width = max(700, int(screen_width * 0.75))
+        admin_height = max(500, int(screen_height * 0.75))
+        
+        # 중앙 위치 계산
+        center_x = (screen_width - admin_width) // 2
+        center_y = (screen_height - admin_height) // 2
+        
+        # 크기와 위치를 한 번에 설정
+        admin_win.geometry(f"{admin_width}x{admin_height}+{center_x}+{center_y}")
         main_frame = ttk.Frame(admin_win, padding=10)
         main_frame.pack(fill="both", expand=True)
         main_frame.rowconfigure(1, weight=1); main_frame.columnconfigure(1, weight=1)
@@ -976,7 +1101,9 @@ class TennisBookingGUI:
         self.log_message("예약 중지!")
 
     def reset_booking_state(self):
-        self.start_button.config(state=tk.NORMAL); self.stop_button.config(state=tk.DISABLED)
+        self.is_booking_active = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
 
     async def booking_worker_async(self, targets: List[Dict[str, Any]]):
         self.root.after(0, self.log_message, f"예약 시간({self.next_booking_time.strftime('%H:%M:%S')})까지 대기...")
@@ -989,8 +1116,13 @@ class TennisBookingGUI:
         successful = set()
         failures = []
         start_t = time.time()
+        
+        # 모든 목표를 추적하기 위한 세트 생성
+        all_target_keys = set(f"{t['date']}|{t['court']}|{t['time']}" for t in targets)
+        attempted_targets = set()  # 실제로 시도한 목표들
+        
         async with aiohttp.ClientSession() as session:
-            while self.is_booking_active and (time.time() - start_t) < 60 and len(successful) < len(targets):
+            while self.is_booking_active and (time.time() - start_t) < 30 and len(successful) < len(targets):
                 try:
                     slots = await self.booking_api.get_available_slots_async(start_date, end_date)
                     tasks, pending = [], []
@@ -1004,6 +1136,7 @@ class TennisBookingGUI:
                             if t['date'] == s_date and t['time'] == s_time_str and self.booking_api.courts_info.get(t['court']) == s_court:
                                 tasks.append(self.booking_api.reserve_slot_async(session, slot['id']))
                                 pending.append(t_key)
+                                attempted_targets.add(t_key)  # 시도한 목표로 추가
                                 self.root.after(0, self.log_message, f"🎯 [{t['date']} {t['court']}번 {t['time']}] 작업 추가!")
                                 break
                     if tasks:
@@ -1018,14 +1151,26 @@ class TennisBookingGUI:
                                 if res['success']:
                                     successful.add(t_key)
                                 else:
+                                    # 시도했지만 실패한 경우
                                     failures.append({"target": {"date": t_date_str, "court": int(t_court_str), "time": t_time_str}, "reason": res['message']})
                 except Exception as e:
                     self.log_message(f"Booking loop error: {e}", level='error')
+
+        # 사용자가 중지한 경우의 실패 처리
         if not self.is_booking_active:
             for t in targets:
                 t_key = f"{t['date']}|{t['court']}|{t['time']}"
                 if t_key not in successful:
                     failures.append({"target": t, "reason": "사용자가 직접 중지"})
+        else:
+            # 60초 시간 제한 또는 모든 슬롯 확인 후 미처리 목표들 실패 처리
+            for t_key in all_target_keys:
+                if t_key not in successful and t_key not in attempted_targets:
+                    t_date_str, t_court_str, t_time_str = t_key.split('|')
+                    target_dict = {"date": t_date_str, "court": int(t_court_str), "time": t_time_str}
+                    failures.append({"target": target_dict, "reason": "해당 시간대에 예약 가능한 슬롯을 찾을 수 없음"})
+                    self.root.after(0, self.log_message, f"❌ [{t_date_str} {t_court_str}번 {t_time_str}] 실패: 해당 시간대에 예약 가능한 슬롯을 찾을 수 없음")
+
         successful_list = []
         for s_key in successful:
             try:
@@ -1040,7 +1185,7 @@ class TennisBookingGUI:
             event_type="booking_summary",
             event_data=summary_data
         )
-        self.root.after(0, self.log_message, f"🎉 프로세스 종료. 성공: {len(successful)}개")
+        self.root.after(0, self.log_message, f"🎉 프로세스 종료. 성공: {len(successful)}개, 실패: {len(failures)}개")
         self.root.after(0, self.reset_booking_state)
         self.root.after(0, self.load_my_reservations)
 
