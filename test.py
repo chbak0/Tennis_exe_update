@@ -305,19 +305,52 @@ class TennisBookingGUI:
             return
         try:
             response = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest", timeout=5)
-            if response.status_code == 200:
-                latest_release = response.json()
-                latest_version = latest_release.get("tag_name", "v0.0.0").replace('v', '')
-                current_version = APP_VERSION
-                if latest_version > current_version:
-                    download_url = latest_release.get("html_url")
-                    if latest_release.get('assets'):
-                        download_url = latest_release['assets'][0].get('browser_download_url')
-                    message = f"새로운 버전(v{latest_version})이 출시되었습니다!\n\n현재 버전: v{current_version}\n\n다운로드 페이지로 이동하시겠습니까?"
-                    if messagebox.askyesno("새 버전 알림", message):
-                        webbrowser.open(download_url)
+            if response.status_code != 200: return
+
+            latest_release = response.json()
+            latest_version = latest_release.get("tag_name", "v0.0.0").replace('v', '')
+            current_version = APP_VERSION
+
+            if latest_version > current_version:
+                message = f"새로운 버전(v{latest_version})이 출시되었습니다! 지금 자동으로 업데이트하시겠습니까?"
+                if not messagebox.askyesno("업데이트 가능", message):
+                    return
+
+                self.log_message(f"v{latest_version} 자동 업데이트를 시작합니다...")
+                
+                # 릴리즈에서 앱과 업데이터의 다운로드 URL을 찾습니다.
+                app_url, updater_url = None, None
+                for asset in latest_release.get('assets', []):
+                    if asset['name'].endswith('.exe') and 'updater' not in asset['name']:
+                        app_url = asset['browser_download_url']
+                    elif asset['name'] == 'updater.exe':
+                        updater_url = asset['browser_download_url']
+                
+                if not app_url or not updater_url:
+                    messagebox.showerror("업데이트 실패", "GitHub 릴리즈에서 업데이트 파일(프로그램, 업데이터)을 찾을 수 없습니다.")
+                    return
+
+                # 새 버전 앱과 업데이터를 임시 파일로 다운로드합니다.
+                self.log_message("새 버전 다운로드 중...")
+                with open("app_new.exe", "wb") as f:
+                    f.write(requests.get(app_url).content)
+
+                self.log_message("업데이터 다운로드 중...")
+                with open("updater_temp.exe", "wb") as f:
+                    f.write(requests.get(updater_url).content)
+                
+                self.log_message("다운로드 완료. 프로그램을 재시작하여 업데이트를 완료합니다.")
+
+                # 현재 실행중인 파일 이름을 찾습니다.
+                current_executable = os.path.basename(sys.executable if getattr(sys, 'frozen', False) else sys.argv[0])
+
+                # 업데이터를 실행하고, 현재 프로그램은 종료합니다.
+                subprocess.Popen(['updater_temp.exe', current_executable, 'app_new.exe'])
+                self.root.destroy()
+
         except Exception as e:
             self.log_message(f"업데이트 확인 중 오류 발생: {e}", level='warning')
+            messagebox.showerror("업데이트 오류", f"업데이트 중 오류가 발생했습니다:\n{e}")
 
     def create_widgets(self):
         self.root.columnconfigure(0, weight=3); self.root.columnconfigure(1, weight=2)
