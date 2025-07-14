@@ -65,7 +65,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.0"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.1"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
@@ -222,11 +222,21 @@ class TennisBookingGUI:
         self.root.title(f"송도 테니스 예약 자동화 (v{APP_VERSION})")
         self.time_offset = 0
         self.analytics_logger = AnalyticsLogger(ANALYTICS_URL, ANALYTICS_KEY)
-        window_width, window_height = 1450, 950
-        screen_width, screen_height = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # 화면 크기의 90% 너비와 85% 높이로 창 크기를 설정합니다.
+        # 이 비율(0.9, 0.85)은 원하는 대로 조절할 수 있습니다.
+        window_width = int(screen_width * 0.7)
+        window_height = int(screen_height * 0.85)
+        
+        # 창이 너무 작아지는 것을 방지하기 위한 최소 크기를 정해줍니다.
+        self.root.minsize(1280, 800)
+
+        # 창을 화면 정중앙에 위치시킵니다.
         center_x = int(screen_width / 2 - window_width / 2)
-        top_y = int((screen_height - window_height) * 0.3)
-        self.root.geometry(f'{window_width}x{window_height}+{center_x}+{top_y}')
+        center_y = int(screen_height / 2 - window_height / 2)
+        self.root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
         style = ttk.Style(); style.theme_use('clam')
         self.booking_api = SongdoTennisBooking()
         self.is_logged_in = False
