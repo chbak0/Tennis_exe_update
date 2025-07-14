@@ -9,6 +9,8 @@ dist/
 # 파이썬 캐시 파일
 __pycache__/
 
-# 로그 및 백업 파일
+# 로그, 설정 및 키 파일
 *.log
 *.old
+app.key
+tennis_booking_config.json
