@@ -21,6 +21,7 @@ import base64
 import ntplib
 import uuid
 import webbrowser
+import subprocess
 
 # ==============================================================================
 # 1. 로깅 설정
@@ -65,7 +66,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.3"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.4"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
