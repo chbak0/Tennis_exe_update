@@ -2,25 +2,53 @@ import sys
 import os
 import time
 import subprocess
+import tkinter as tk
 
-try:
-    old_app_name = sys.argv[1]
-    new_app_name = sys.argv[2]
+def perform_update(root):
+    try:
+        old_app_name = sys.argv[1]
+        new_app_name = sys.argv[2]
 
-    # 1. 메인 프로그램이 완전히 종료될 시간을 줍니다.
-    time.sleep(3)
+        time.sleep(3)
 
-    # 2. 구버전 파일을 .old로 이름을 바꿉니다.
-    if os.path.exists(old_app_name):
-        os.rename(old_app_name, old_app_name + ".old")
+        if os.path.exists(old_app_name):
+            os.rename(old_app_name, old_app_name + ".old")
 
-    # 3. 다운로드한 신버전 파일의 이름을 메인 프로그램 이름으로 바꿉니다.
-    os.rename(new_app_name, old_app_name)
+        os.rename(new_app_name, old_app_name)
 
-    # 4. 업데이트된 새 프로그램을 실행합니다.
-    subprocess.Popen([old_app_name])
+        subprocess.Popen([old_app_name])
 
-except Exception as e:
-    # 오류 발생 시 로그 파일을 남깁니다.
-    with open("updater_error.log", "w") as f:
-        f.write(str(e))
+    except Exception as e:
+        with open("updater_error.log", "w") as f:
+            f.write(str(e))
+    finally:
+        root.destroy()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.withdraw() # 창 숨기기
+    
+    # 작은 안내 창 스타일 설정
+    root.overrideredirect(True) # 창 테두리 없애기
+    root.attributes('-topmost', True) # 항상 위에 표시
+    
+    # 안내 메시지
+    label = tk.Label(root, text="업데이트 중입니다...\n잠시 후 프로그램이 다시 시작됩니다.",
+                     font=("Malgun Gothic", 12), bg="white", padx=20, pady=20,
+                     relief="solid", borderwidth=1)
+    label.pack()
+
+    # 창을 화면 정중앙에 위치시키기
+    root.update_idletasks()
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width - root.winfo_width()) // 2
+    y = (screen_height - root.winfo_height()) // 2
+    root.geometry(f"+{x}+{y}")
+    
+    root.deiconify() # 창 표시
+
+    # GUI가 표시된 후 실제 업데이트 작업을 수행
+    root.after(100, lambda: perform_update(root))
+    
+    root.mainloop()
