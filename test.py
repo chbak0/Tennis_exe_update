@@ -73,7 +73,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.7"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.8"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
@@ -471,16 +471,28 @@ class TennisBookingGUI:
             messagebox.showerror("업데이트 오류", f"업데이트 중 오류가 발생했습니다:\n{e}")
     
     def cleanup_after_update(self):
-        """업데이트 후 남은 .old 파일을 정리합니다."""
-        time.sleep(1) # 프로그램이 완전히 시작될 시간을 줍니다.
+        """업데이트 후 남은 .old 파일과 임시 업데이터 파일을 정리합니다."""
+        time.sleep(1) 
         try:
+            # .old 파일 경로 설정
             current_executable = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
             old_file = current_executable + ".old"
+            
+            # 임시 업데이터 파일 경로 설정
+            updater_temp_file = "updater_temp.exe"
+
+            # .old 파일이 있으면 삭제
             if os.path.exists(old_file):
                 os.remove(old_file)
                 self.log_message(f"업데이트 백업 파일({os.path.basename(old_file)})을 삭제했습니다.")
+
+            # updater_temp.exe 파일이 있으면 삭제
+            if os.path.exists(updater_temp_file):
+                os.remove(updater_temp_file)
+                self.log_message(f"임시 업데이터 파일({updater_temp_file})을 삭제했습니다.")
+
         except Exception as e:
-            self.log_message(f"백업 파일 삭제 중 오류: {e}", level='warning')
+            self.log_message(f"업데이트 파일 정리 중 오류: {e}", level='warning')
 
     def create_widgets(self):
         self.root.columnconfigure(0, weight=3)
