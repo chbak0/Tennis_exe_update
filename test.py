@@ -26,7 +26,14 @@ import subprocess
 # ==============================================================================
 # 1. 로깅 설정
 # ==============================================================================
-LOG_FILE_BASENAME = 'app.log'
+DATA_DIR = "app_data"
+
+# 로그 설정을 하기 전에 폴더가 있는지 먼저 확인하고, 없으면 생성합니다.
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+LOG_FILE_BASENAME = os.path.join(DATA_DIR, 'app.log')
+file_handler = None
 file_handler = None
 
 def setup_logging():
@@ -66,7 +73,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.6"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.7"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
@@ -74,21 +81,73 @@ SUPABASE_URL = "https://ydiivmmorbqbvrahrutd.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkaWl2bW1vcmJxYnZyYWhydXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzM3MjA4MDEsImV4cCI6MTk4OTI5NjgwMX0.jcX7WYAImKzfYuLi4exAlvMB1zpfKFf9iWN7_gnbjaI"
 HEADERS = {"apikey": SUPABASE_ANON_KEY, "x-client-info": "supabase-py/1.0.0"}
 KST = timezone(timedelta(hours=9))
-KEY_FILE = 'app.key'
+KEY_FILE = os.path.join(DATA_DIR, 'app.key')
 
 class AnalyticsLogger:
     def __init__(self, url: str, key: str):
-        self.url = f"{url}/rest/v1/analytics_logs"
+        self.base_url = url
         self.headers = {"apikey": key, "Content-Type": "application/json"}
+        self.analytics_url = f"{self.base_url}/rest/v1/analytics_logs"
+        self.reservations_url = f"{self.base_url}/rest/v1/current_reservations"
+        self.targets_url = f"{self.base_url}/rest/v1/booking_targets" # <<< 추가
+
     def log_event(self, user_email: str, machine_id: str, event_type: str, event_data: dict):
         threading.Thread(target=self._send_log, args=(user_email, machine_id, event_type, event_data), daemon=True).start()
+
     def _send_log(self, user_email: str, machine_id: str, event_type: str, event_data: dict):
         try:
             payload = {"user_email": user_email, "machine_id": machine_id, "app_version": APP_VERSION,
                        "event_type": event_type, "event_data": event_data}
-            requests.post(self.url, headers=self.headers, json=payload, timeout=15)
+            requests.post(self.analytics_url, headers=self.headers, json=payload, timeout=15)
         except Exception as e:
             logging.warning(f"Analytics log submission failed: {e}")
+
+    def sync_reservations(self, user_email: str, reservation_list: List[Dict[str, Any]]):
+        threading.Thread(target=self._sync_reservations_worker, args=(user_email, reservation_list), daemon=True).start()
+
+    def _sync_reservations_worker(self, user_email: str, reservation_list: List[Dict[str, Any]]):
+        try:
+            delete_headers = {**self.headers, "Prefer": "return=minimal"}
+            requests.delete(f"{self.reservations_url}?user_email=eq.{user_email}", headers=delete_headers)
+            if reservation_list:
+                payload = [{"user_email": user_email, "booking_date": res.get("date"),
+                            "court_name": f"{res.get('court')}번 코트", "booking_time": res.get("time"),
+                            "is_paid": res.get("is_paid", False)} for res in reservation_list]
+                requests.post(self.reservations_url, headers=self.headers, json=payload, timeout=15)
+        except Exception as e:
+            logging.warning(f"Reservation sync failed: {e}")
+    
+    # <<<--- 이 메소드를 새로 추가합니다 --->>>
+    def sync_targets(self, user_email: str, targets_list: List[Dict[str, Any]]):
+        threading.Thread(target=self._sync_targets_worker, args=(user_email, targets_list), daemon=True).start()
+
+    def _sync_targets_worker(self, user_email: str, targets_list: List[Dict[str, Any]]):
+        try:
+            delete_headers = {**self.headers, "Prefer": "return=minimal"}
+            requests.delete(f"{self.targets_url}?user_email=eq.{user_email}", headers=delete_headers)
+            if targets_list:
+                payload = [{"user_email": user_email, "booking_date": t.get("date"),
+                            "court_number": t.get("court"), "booking_time": t.get("time")}
+                           for t in targets_list]
+                requests.post(self.targets_url, headers=self.headers, json=payload, timeout=15)
+        except Exception as e:
+            logging.warning(f"Target sync failed: {e}")
+    
+    def log_booking_targets(self, user_email: str, targets_list: List[Dict[str, Any]]):
+        """'예약 시작' 시점의 목표들을 별도의 로그 테이블에 기록합니다."""
+        threading.Thread(target=self._log_targets_worker, args=(user_email, targets_list), daemon=True).start()
+
+    def _log_targets_worker(self, user_email: str, targets_list: List[Dict[str, Any]]):
+        try:
+            if targets_list:
+                # 이 테이블의 URL을 직접 지정합니다.
+                url = f"{self.base_url}/rest/v1/target_check_logs"
+                payload = [{"user_email": user_email, "booking_date": t.get("date"),
+                            "court_number": t.get("court"), "booking_time": t.get("time")}
+                           for t in targets_list]
+                requests.post(url, headers=self.headers, json=payload, timeout=15)
+        except Exception as e:
+            logging.warning(f"Target check log failed: {e}")
 
 def load_key():
     if os.path.exists(KEY_FILE): return open(KEY_FILE, 'rb').read()
@@ -279,7 +338,7 @@ class TennisBookingGUI:
         self.booking_api = SongdoTennisBooking()
         self.is_logged_in = False
         self.is_booking_active = False
-        self.config_file = "tennis_booking_config.json"
+        self.config_file = os.path.join(DATA_DIR, "tennis_booking_config.json")
         self.machine_id = self.load_or_create_machine_id()
         self.session_start_time = datetime.now()
         self.booking_targets: List[Dict[str, Any]] = []
@@ -322,6 +381,26 @@ class TennisBookingGUI:
                 self.log_message(f"Machine ID 저장 실패: {e}", level='error')
                 return "ID_GENERATION_FAILED"
         return machine_id
+
+    def _heartbeat_worker(self):
+        """10분에 한 번씩 앱 생존 신호(하트비트)를 보냅니다."""
+        while self.is_logged_in:
+            # 10분(600초)을 먼저 기다립니다.
+            # time.sleep()은 여러 번 호출해도 괜찮으므로, 10초씩 60번 나누어 확인합니다.
+            for _ in range(30):
+                time.sleep(10)
+                # 중간에 로그아웃하면 즉시 루프를 탈출합니다.
+                if not self.is_logged_in:
+                    return
+
+            # 잠에서 깬 후, 로그인 상태이고 '예약 중'이 아닐 때만 신호를 보냅니다.
+            if self.is_logged_in and not self.is_booking_active:
+                self.analytics_logger.log_event(
+                    user_email=self.username_entry.get(),
+                    machine_id=self.machine_id,
+                    event_type="app_heartbeat",
+                    event_data={"status": "running"}
+                )
 
     def sync_time(self):
         threading.Thread(target=self._sync_time_worker, daemon=True).start()
@@ -622,8 +701,10 @@ class TennisBookingGUI:
         top_btn_frame.grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
         def populate_log_file_list():
             log_listbox.delete(0, tk.END)
-            log_files = sorted(glob.glob(f'{LOG_FILE_BASENAME}*'), reverse=True)
-            for log_file in log_files: log_listbox.insert(tk.END, os.path.basename(log_file))
+            # 로그 파일을 app_data 폴더 안에서 찾도록 수정
+            log_files = sorted(glob.glob(os.path.join(DATA_DIR, 'app.log*')), reverse=True)
+            for log_file in log_files: 
+                log_listbox.insert(tk.END, os.path.basename(log_file))
         def on_log_file_select(event):
             selected_indices = log_listbox.curselection()
             if not selected_indices: return
@@ -754,12 +835,21 @@ class TennisBookingGUI:
         self.root.after(0, self.handle_login_result, success, message)
 
     def logout(self):
+        # UI 필드가 지워지기 전에 이메일 정보와 목표 목록을 가져옵니다.
+        user_email = self.username_entry.get()
+        current_targets = self.booking_targets
+
+        # 로그아웃 또는 종료 시 최종 목표 상태를 동기화합니다.
+        if self.is_logged_in:
+            self.analytics_logger.sync_targets(user_email, current_targets)
+
         self.is_logged_in = False
         self.booking_api.auth_token = None
         self.booking_api.user_id = None
         self.login_button.config(state=tk.NORMAL)
         self.logout_button.config(state=tk.DISABLED)
         self.login_status_label.config(text="로그인 상태: 로그아웃", foreground="red")
+        self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
         self.reservation_data.clear()
         for i in self.my_bookings_tree.get_children(): self.my_bookings_tree.delete(i)
@@ -779,6 +869,7 @@ class TennisBookingGUI:
             self.logout_button.config(state=tk.NORMAL)
             self.load_courts_info()
             self.load_my_reservations()
+            threading.Thread(target=self._heartbeat_worker, daemon=True).start()
         else:
             self.analytics_logger.log_event(
                 user_email=self.username_entry.get(),
@@ -833,54 +924,102 @@ class TennisBookingGUI:
         self.root.after(0, self.update_my_bookings_tree, enriched_reservations)
 
     def update_my_bookings_tree(self, reservations: List[Dict[str, Any]]):
-        for i in self.my_bookings_tree.get_children(): self.my_bookings_tree.delete(i)
+        # 1. 기존에 화면에 표시되던 내용을 모두 지웁니다.
+        for i in self.my_bookings_tree.get_children():
+            self.my_bookings_tree.delete(i)
         self.reservation_data.clear()
         
+        # 2. 예약 내역이 없는 경우의 처리
         if not reservations: 
             self.log_message("예약된 내역이 없습니다.")
+            # 분석 로그 기록 (조회 결과 0건)
             self.analytics_logger.log_event(
-                user_email=self.username_entry.get(), machine_id=self.machine_id,
+                user_email=self.username_entry.get(),
+                machine_id=self.machine_id,
                 event_type="load_reservations",
-                event_data={"reservation_count": 0, "reservations": []})
+                event_data={"reservation_count": 0, "reservations": []}
+            )
+            # 실시간 현황 동기화 (기존 기록 삭제)
+            self.analytics_logger.sync_reservations(
+                user_email=self.username_entry.get(),
+                reservation_list=[]
+            )
             return
 
+        # 3. 예약 내역 처리 및 화면 표시
         items_added = 0
         loaded_reservations_details = []
         
         for res in reservations:
             try:
                 if not isinstance(res, dict): continue
-                slot_info = res.get('slots');
+                slot_info = res.get('slots')
                 if not isinstance(slot_info, dict): continue
                 res_id_for_cancel = res.get('id')
                 if not res_id_for_cancel: continue 
+                
                 kst = datetime.fromisoformat(slot_info['start_time'].replace('Z', '+00:00')).astimezone(KST)
                 date_str, time_str = kst.strftime("%Y-%m-%d"), kst.strftime("%H:%M")
                 court_name = slot_info.get('courts', {}).get('name', '정보 없음')
+                
                 court_number_match = re.search(r'\d+', court_name)
                 court_number = int(court_number_match.group()) if court_number_match else 99
+                
                 payment_status = res.get('payment_status')
                 is_paid = self._is_payment_completed(payment_status)
+                
                 status_text = "취소 불가 (결제완료)" if is_paid else "클릭하여 취소"
                 tag = 'non_cancellable' if is_paid else 'cancellable'
+                
                 values = (date_str, court_name, time_str, status_text)
                 item_id = self.my_bookings_tree.insert('', 'end', values=values, tags=(tag,))
                 items_added += 1
+                
                 original_values = (date_str, court_name, time_str)
-                self.reservation_data[item_id] = {'id': res_id_for_cancel, 'payment_status': payment_status, 'values': original_values, 'is_paid': is_paid}
-                loaded_reservations_details.append({"date": date_str, "court": court_number, "time": time_str})
+                self.reservation_data[item_id] = {
+                    'id': res_id_for_cancel,
+                    'payment_status': payment_status,
+                    'values': original_values,
+                    'is_paid': is_paid
+                }
+                
+                # 로그 및 동기화용 데이터 목록에 추가
+                loaded_reservations_details.append({
+                    "date": date_str,
+                    "court": court_number,
+                    "time": time_str,
+                    "is_paid": is_paid
+                })
             except Exception as e:
                 self.log_message(f"예약 정보 파싱 오류: {e}", level='error')
 
+        # 4. 최종 정리 및 로그/동기화 작업 수행
+        # 데이터 정렬 (요청사항)
         loaded_reservations_details.sort(key=lambda x: (x['date'], x['court'], x['time']))
+        
+        # UI 테이블 정렬
         self.sort_my_bookings_tree('예약 날짜')
+        
+        # UI 로그 메시지 출력
         self.log_message(f"📋 총 {items_added}개의 예약 정보를 화면에 표시했습니다.")
-        final_log_data = {"reservation_count": items_added, "reservations": loaded_reservations_details}
+        
+        # Supabase에 분석용 '역사' 로그 기록
+        analytics_data = {
+            "reservation_count": items_added,
+            "reservations": loaded_reservations_details
+        }
         self.analytics_logger.log_event(
             user_email=self.username_entry.get(),
             machine_id=self.machine_id,
             event_type="load_reservations",
-            event_data=final_log_data)
+            event_data=analytics_data
+        )
+            
+        # Supabase에 '실시간 현황' 동기화
+        self.analytics_logger.sync_reservations(
+            user_email=self.username_entry.get(),
+            reservation_list=loaded_reservations_details
+        )
 
     def _cancel_worker(self, reservation_id: str):
         success, message = self.booking_api.cancel_reservation(reservation_id)
@@ -900,6 +1039,7 @@ class TennisBookingGUI:
         self.booking_targets.append({'date': date, 'court': court_number, 'time': time})
         self.targets_tree.insert('', 'end', values=(date, f"{court_number}번 코트", time))
         self.log_message(f"목표 추가: {date} {court_number}번 코트 {time}")
+        self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
 
     def remove_booking_target(self):
         if not self.targets_tree.selection(): return messagebox.showwarning("선택 오류", "삭제할 목표를 선택해주세요.")
@@ -909,11 +1049,13 @@ class TennisBookingGUI:
             self.booking_targets = [t for t in self.booking_targets if not (t['date'] == date and t['court'] == court and t['time'] == time)]
             self.targets_tree.delete(item)
             self.log_message(f"목표 삭제: {date} {court}번 코트 {time}")
+        self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
 
     def clear_all_targets(self):
         if messagebox.askyesno("확인", "모든 예약 목표를 삭제하시겠습니까?"):
             self.booking_targets.clear(); [self.targets_tree.delete(i) for i in self.targets_tree.get_children()]
             self.log_message("모든 목표 삭제 완료")
+            self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
 
     def show_auto_add_dialog(self, day_type: str):
         dialog = tk.Toplevel(self.root)
@@ -973,6 +1115,7 @@ class TennisBookingGUI:
             cb.grid(row=(i - 5) // 7, column=(i - 5) % 7, sticky="w", padx=20, pady=8)
             vars_dict['courts'][i] = var
         for i in range(7): court_grid_frame.columnconfigure(i, weight=1)
+        
         def add_targets():
             added, dates, times, courts = 0, [d for d, v in vars_dict['dates'].items() if v.get()], \
                                           [t for t, v in vars_dict['times'].items() if v.get()], \
@@ -988,7 +1131,12 @@ class TennisBookingGUI:
                             added += 1
             if added > 0:
                 self.log_message(f"{day_type} 목표 {added}개 추가 완료")
+                
+                # <<<--- 이 동기화 코드를 추가합니다 --->>>
+                self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
+                
                 dialog.destroy()
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(pady=15)
         ttk.Button(btn_frame, text="목표 추가", command=add_targets).pack(side="left", padx=10)
@@ -1076,6 +1224,7 @@ class TennisBookingGUI:
             else: self.auto_set_default_booking_time()
             self.calculate_booking_time()
             self.log_message("저장된 설정을 불러왔습니다.")
+            self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
         except Exception as e:
             self.log_message(f"설정 불러오기 실패: {e}", level='error'); self.auto_set_default_booking_time(); self.calculate_booking_time()
 
@@ -1105,7 +1254,12 @@ class TennisBookingGUI:
         if not self.is_logged_in: return messagebox.showerror("오류", "먼저 로그인해주세요.")
         if not self.booking_targets: return messagebox.showerror("오류", "예약 목표를 추가해주세요.")
         if not self.booking_api.courts_info: return messagebox.showerror("오류", "코트 정보가 없습니다.")
-        self.is_booking_active = True; self.start_button.config(state=tk.DISABLED); self.stop_button.config(state=tk.NORMAL)
+
+        self.analytics_logger.log_booking_targets(self.username_entry.get(), self.booking_targets)
+
+        self.is_booking_active = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
         self.log_message("예약 시작!")
         threading.Thread(target=lambda: asyncio.run(self.booking_worker_async(self.booking_targets)), daemon=True).start()
 
@@ -1211,7 +1365,13 @@ def main():
     global app
     app = TennisBookingGUI(root)
     def on_closing():
-        if app.is_booking_active and not messagebox.askokcancel("종료", "예약이 실행 중입니다. 정말 종료하시겠습니까?"): return
+        if app.is_booking_active and not messagebox.askokcancel("종료", "예약이 실행 중입니다. 정말 종료하시겠습니까?"):
+            return
+        
+        # 앱 종료 직전의 최종 목표 목록 상태를 동기화합니다.
+        if app.is_logged_in:
+            app.analytics_logger.sync_targets(app.username_entry.get(), app.booking_targets)
+        
         app.stop_booking()
         if app.is_logged_in:
             duration = (app.get_synced_time() - app.session_start_time).total_seconds()
@@ -1221,8 +1381,10 @@ def main():
                 event_type="app_close",
                 event_data={"duration_seconds": int(duration)})
             time.sleep(0.5)
+            
         logging.shutdown()
         root.destroy()
+        
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
 
