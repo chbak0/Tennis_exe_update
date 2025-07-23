@@ -10,7 +10,7 @@ dist/
 __pycache__/
 
 # 로그, 설정 및 키 파일
-*.log
+app.log*
 *.old
 app.key
 tennis_booking_config.json
