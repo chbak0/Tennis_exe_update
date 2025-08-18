@@ -73,7 +73,7 @@ setup_logging()
 # 🚨🚨🚨 아래 4개의 설정값을 본인의 정보로 꼭 채워주세요! 🚨🚨🚨
 ANALYTICS_URL = "https://uppuyydtqhaulobevczk.supabase.co" # 질문자님의 Supabase URL
 ANALYTICS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwcHV5eWR0cWhhdWxvYmV2Y3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0ODE5NTQsImV4cCI6MjA2ODA1Nzk1NH0.yHz7U7XXV34Dlvs8PAoZ6EyD6vz1y77dAFpbh0_7noc" # 질문자님의 Supabase anon key
-APP_VERSION = "1.0.8"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
+APP_VERSION = "1.0.9"  # 새 버전을 배포할 때마다 이 숫자를 올려주세요 (예: "1.0.1")
 GITHUB_REPO = "chbak0/Tennis_exe_update" # 질문자님의 GitHub 아이디/저장소이름
 
 # --- 기존 예약 시스템 API 정보 ---
@@ -1218,27 +1218,84 @@ class TennisBookingGUI:
         except Exception as e: messagebox.showerror("저장 실패", f"설정 저장 실패: {e}")
 
     def load_config(self):
+        # 설정 파일이 아예 없으면, 기본값으로 새로 시작합니다.
         if not os.path.exists(self.config_file):
-            self.auto_set_default_booking_time(); self.calculate_booking_time(); return
+            self.auto_set_default_booking_time()
+            self.calculate_booking_time()
+            self.log_message("설정 파일이 없어 기본값으로 시작합니다.")
+            return
+        
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as f: config = json.load(f)
-            self.username_entry.delete(0, tk.END); self.username_entry.insert(0, config.get('username', ''))
-            self.password_entry.delete(0, tk.END); self.password_entry.insert(0, decrypt_password(config.get('password', '')))
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # --- 로그인 정보 및 예약 목표 로딩 (이 부분은 기존과 동일) ---
+            self.username_entry.delete(0, tk.END)
+            self.username_entry.insert(0, config.get('username', ''))
+            self.password_entry.delete(0, tk.END)
+            self.password_entry.insert(0, decrypt_password(config.get('password', '')))
             self.machine_id = config.get('machine_id', self.machine_id)
             self.booking_targets = config.get('booking_targets', [])
-            for i in self.targets_tree.get_children(): self.targets_tree.delete(i)
-            for target in self.booking_targets: self.targets_tree.insert('', 'end', values=(target['date'], f"{target['court']}번 코트", target['time']))
+
+            for i in self.targets_tree.get_children():
+                self.targets_tree.delete(i)
+            for target in self.booking_targets:
+                self.targets_tree.insert('', 'end', values=(target['date'], f"{target['court']}번 코트", target['time']))
+
+            # <<<--- 여기가 문제를 완벽하게 해결한 예약 시간 로딩 로직입니다 --- START --->>>
             time_settings = config.get('booking_time')
-            if time_settings:
-                self.booking_year_var.set(time_settings.get('year')); self.booking_month_var.set(time_settings.get('month'))
-                self.booking_day_var.set(time_settings.get('day')); self.booking_hour_var.set(time_settings.get('hour'))
-                self.booking_minute_var.set(time_settings.get('minute')); self.booking_second_var.set(time_settings.get('second'))
-            else: self.auto_set_default_booking_time()
+            now = datetime.now()
+            booking_day_setting = 26  # 날짜 업데이트 기준일
+            should_auto_set = False   # 자동 설정을 해야 하는지 여부를 저장할 변수
+            log_message = ""          # 로그 메시지를 저장할 변수
+
+            # 1. 저장된 시간 설정이 아예 없는 경우
+            if not time_settings:
+                should_auto_set = True
+                log_message = "저장된 시간 정보가 없어 기본 예약일로 설정합니다."
+            else:
+                try:
+                    saved_booking_time = datetime(
+                        time_settings.get('year'), time_settings.get('month'), time_settings.get('day'),
+                        time_settings.get('hour'), time_settings.get('minute'), time_settings.get('second')
+                    )
+
+                    # 2. [최우선 규칙] 오늘이 26일 이후인데, 저장된 날짜의 '월'이 이번 달과 같거나 이전일 경우
+                    if now.day >= booking_day_setting and saved_booking_time.month <= now.month:
+                        should_auto_set = True
+                        log_message = f"매달 {booking_day_setting}일이 지나, 예약 시간을 다음 달로 자동 갱신합니다."
+                    
+                    # 3. [두번째 규칙] 저장된 날짜가 이미 과거일 경우
+                    elif saved_booking_time < now:
+                        should_auto_set = True
+                        log_message = "저장된 예약 시간이 과거라 자동으로 현재 기준으로 갱신합니다."
+
+                except (ValueError, TypeError):
+                    should_auto_set = True
+                    log_message = "저장된 시간 정보에 오류가 있어 기본 예약일로 초기화합니다."
+
+            # 최종 결정: 자동 설정을 해야 한다면 auto_set_default_booking_time() 호출
+            if should_auto_set:
+                self.auto_set_default_booking_time()
+                if log_message: self.log_message(log_message)
+            # 자동 설정을 할 필요가 없다면, 저장된 값을 그대로 사용
+            else:
+                self.booking_year_var.set(time_settings.get('year'))
+                self.booking_month_var.set(time_settings.get('month'))
+                self.booking_day_var.set(time_settings.get('day'))
+                self.booking_hour_var.set(time_settings.get('hour'))
+                self.booking_minute_var.set(time_settings.get('minute'))
+                self.booking_second_var.set(time_settings.get('second'))
+            # <<<--- 최종 수정 로직 --- END --->>>
+
             self.calculate_booking_time()
-            self.log_message("저장된 설정을 불러왔습니다.")
+            self.log_message("저장된 설정을 성공적으로 불러왔습니다.")
             self.analytics_logger.sync_targets(self.username_entry.get(), self.booking_targets)
+
         except Exception as e:
-            self.log_message(f"설정 불러오기 실패: {e}", level='error'); self.auto_set_default_booking_time(); self.calculate_booking_time()
+            self.log_message(f"설정 불러오기 중 심각한 오류 발생: {e}", level='error')
+            self.auto_set_default_booking_time()
+            self.calculate_booking_time()
 
     def auto_set_default_booking_time(self):
         now = datetime.now(); booking_day_setting = 25
