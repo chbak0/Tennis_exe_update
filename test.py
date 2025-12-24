@@ -686,11 +686,9 @@ class TennisBookingGUI:
         admin_width = max(700, int(screen_width * 0.75))
         admin_height = max(500, int(screen_height * 0.75))
         
-        # 중앙 위치 계산
         center_x = (screen_width - admin_width) // 2
         center_y = (screen_height - admin_height) // 2
         
-        # 크기와 위치를 한 번에 설정
         admin_win.geometry(f"{admin_width}x{admin_height}+{center_x}+{center_y}")
         main_frame = ttk.Frame(admin_win, padding=10)
         main_frame.pack(fill="both", expand=True)
@@ -711,49 +709,70 @@ class TennisBookingGUI:
         log_display.grid(row=0, column=0, sticky='nsew')
         top_btn_frame = ttk.Frame(main_frame)
         top_btn_frame.grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 10))
+        
         def populate_log_file_list():
             log_listbox.delete(0, tk.END)
-            # 로그 파일을 app_data 폴더 안에서 찾도록 수정
             log_files = sorted(glob.glob(os.path.join(DATA_DIR, 'app.log*')), reverse=True)
-            for log_file in log_files: 
+            for log_file in log_files:
                 log_listbox.insert(tk.END, os.path.basename(log_file))
+
         def on_log_file_select(event):
             selected_indices = log_listbox.curselection()
             if not selected_indices: return
             selected_file = log_listbox.get(selected_indices[0])
+            
+            full_path = os.path.join(DATA_DIR, selected_file)
+            
             log_display.config(state='normal'); log_display.delete('1.0', tk.END)
             try:
-                with open(selected_file, 'r', encoding='utf-8') as f: log_display.insert(tk.END, f.read())
-            except Exception as e: log_display.insert(tk.END, f"로그 파일을 읽는 중 오류 발생: {e}")
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    log_display.insert(tk.END, f.read())
+            except Exception as e:
+                log_display.insert(tk.END, f"로그 파일을 읽는 중 오류 발생: {e}")
             log_display.config(state='disabled'); log_display.see(tk.END)
+            
         log_listbox.bind('<<ListboxSelect>>', on_log_file_select)
+        
         def safe_file_operation(operation, filepath=None):
             global file_handler
             if file_handler and file_handler in logging.getLogger().handlers:
                 file_handler.close()
                 logging.getLogger().removeHandler(file_handler)
-            try: operation(filepath)
-            except Exception as e: messagebox.showerror("파일 작업 오류", f"파일 작업 중 오류가 발생했습니다: {e}", parent=admin_win)
+            try:
+                operation(filepath)
+            except Exception as e:
+                messagebox.showerror("파일 작업 오류", f"파일 작업 중 오류가 발생했습니다: {e}", parent=admin_win)
             setup_logging()
+
         def delete_file_op(filepath):
             if os.path.exists(filepath): os.remove(filepath)
+
         def delete_selected_file():
             selected_indices = log_listbox.curselection()
             if not selected_indices:
                 messagebox.showwarning("선택 오류", "삭제할 로그 파일을 목록에서 선택해주세요.", parent=admin_win); return
+            
             selected_file = log_listbox.get(selected_indices[0])
+            
+            full_path_to_delete = os.path.join(DATA_DIR, selected_file)
+            
             if messagebox.askyesno("파일 삭제 확인", f"'{selected_file}' 파일을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.", parent=admin_win, icon='warning'):
-                safe_file_operation(delete_file_op, selected_file)
+                safe_file_operation(delete_file_op, full_path_to_delete)
                 self.log_message(f"관리자가 로그 파일 '{selected_file}'을(를) 삭제했습니다.", level='warning')
                 populate_log_file_list()
+                # <<<--- 수정된 부분: tk.END' -> tk.END ---
                 log_display.config(state='normal'); log_display.delete('1.0', tk.END); log_display.config(state='disabled')
+
         def delete_all_files():
             if messagebox.askyesno("전체 삭제 확인", "모든 로그 파일을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.", parent=admin_win, icon='warning'):
-                log_files = glob.glob(f'{LOG_FILE_BASENAME}*')
-                for log_file in log_files: safe_file_operation(delete_file_op, log_file)
+                log_files = glob.glob(os.path.join(DATA_DIR, 'app.log*'))
+                for log_file in log_files:
+                    safe_file_operation(delete_file_op, log_file)
                 self.log_message(f"관리자가 {len(log_files)}개의 로그 파일을 모두 삭제했습니다.", level='warning')
                 populate_log_file_list()
+                # <<<--- 수정된 부분: tk.END' -> tk.END ---
                 log_display.config(state='normal'); log_display.delete('1.0', tk.END); log_display.config(state='disabled')
+                
         ttk.Button(top_btn_frame, text="새로고침", command=populate_log_file_list).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_btn_frame, text="선택 파일 삭제", command=delete_selected_file).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_btn_frame, text="전체 파일 삭제", command=delete_all_files).pack(side=tk.LEFT, padx=5)
